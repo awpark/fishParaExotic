@@ -162,6 +162,25 @@ zPlat2 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & nat
 
 wilcox.test(zPlat1,zPlat2)
 
+zPlat1 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Nematoda") & natBoth=="nat") %>% dplyr::select(mpd.obs.z) %>% pull()
+zPlat2 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Nematoda") & natBoth=="both") %>% dplyr::select(mpd.obs.z) %>% pull()
+
+wilcox.test(zPlat1,zPlat2)
+
+zPlat1 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda") & natBoth=="nat") %>% dplyr::select(mpd.obs.z) %>% pull()
+zPlat2 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda") & natBoth=="both") %>% dplyr::select(mpd.obs.z) %>% pull()
+
+wilcox.test(zPlat1,zPlat2)
+
+library(brunnermunzel)
+
+brunnermunzel.test(zPlat1,zPlat2)
+
+library(nonpar)
+lepage.test(zPlat1,zPlat2)
+
+library(misty)
+test.welch()
 ```
 
 Are the specialists acquired in hosts more related to invasives than the specialists not acquired?
@@ -218,8 +237,10 @@ q %<>% left_join(.,phylum4Merge)
 
 q %<>% dplyr::mutate(z.sg=factor(z.sg,levels=c("spec","gen")))
 
-plot.PDA <- q %>% dplyr::filter(Phylum_parasite %in% c("Nematoda","Platyhelminthes")) %>% ggplot(.,aes(x=z.sg,y=meanPD))+geom_boxplot(aes(fill=as.factor(infect)),alpha=0.5)+facet_wrap(~Phylum_parasite)+scale_fill_manual(name="acquired?",values=c("yellow2","orchid"))+xlab("")+ylab("Average PD between exotic")+theme_classic()+theme(legend.position="none",axis.title.y = element_text(hjust=0))+scale_x_discrete(labels=c("spec"="Specialist","gen"="Generalist"))+ggtitle("Adult stage parasites")
+plot.PDA <- q %>% dplyr::filter(Phylum_parasite %in% c("Nematoda","Platyhelminthes")) %>% ggplot(.,aes(x=z.sg,y=meanPD))+geom_boxplot(aes(fill=as.factor(infect)),alpha=0.5)+facet_wrap(~Phylum_parasite)+scale_fill_manual(name="acquired?",values=c("gold1","dodgerblue3"))+xlab("")+ylab("Average PD between exotic")+theme_classic()+theme(legend.position="none",axis.title.y = element_text(hjust=0))+scale_x_discrete(labels=c("spec"="Specialist","gen"="Generalist"))+ggtitle("Adult stage parasites")
 
+
+q %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda")) %>% ggplot(.,aes(x=mpd.obs.z, y=infect))+geom_point()+stat_smooth(method="loess",span=1,se=FALSE)+scale_y_sqrt()#+ylim(0,0.25)
 
 ```
 
@@ -390,9 +411,15 @@ qJ %<>% left_join(.,phylum4Merge)
 
 qJ %<>% dplyr::mutate(z.sg=factor(z.sg,levels=c("spec","gen")))
 
-plot.PDJ <- qJ %>% dplyr::filter(Phylum_parasite %in% c("Nematoda","Platyhelminthes")) %>% ggplot(.,aes(x=z.sg,y=meanPD))+geom_boxplot(aes(fill=as.factor(infect)),alpha=0.5,position=position_dodge2(preserve="single"))+facet_wrap(~Phylum_parasite)+scale_fill_manual(name="Infect exotic\nspecies",values=c("yellow2","orchid"))+xlab("")+ylab("species and native hosts")+theme_classic()+scale_x_discrete(labels=c("spec"="Specialist","gen"="Generalist"))+ggtitle("Juvenile stage parasites")
+plot.PDJ <- qJ %>% dplyr::filter(Phylum_parasite %in% c("Nematoda","Platyhelminthes")) %>% ggplot(.,aes(x=z.sg,y=meanPD))+geom_boxplot(aes(fill=as.factor(infect)),alpha=0.5,position=position_dodge2(preserve="single"))+facet_wrap(~Phylum_parasite)+scale_fill_manual(name="Infect exotic\nspecies",values=c("gold1","dodgerblue3"))+xlab("")+ylab("species and native hosts")+theme_classic()+scale_x_discrete(labels=c("spec"="Specialist","gen"="Generalist"))+ggtitle("Juvenile stage parasites")
 
-qJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes")) %>% ggplot(.,aes(x=mpd.obs.z, y=infect))+geom_point()+stat_smooth(method="loess",span=1.5,se=FALSE)+facet_wrap(~Phylum_parasite)+scale_y_sqrt()
+qJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda")) %>% ggplot(.,aes(x=mpd.obs.z, y=infect))+geom_point()+stat_smooth(method="loess",span=1.5,se=FALSE)+facet_wrap(~Phylum_parasite)+scale_y_sqrt()
+
+
+z.J0 <- qJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & infect==0)
+z.J1 <- qJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & infect==1)
+
+wilcox.test(z.J0,z.J1)
 
 ```
 
@@ -421,8 +448,14 @@ table(z$natBoth)
 yz <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda") & mpd.obs.z > (-2.33))
 table(yz$natBoth)
 
+xy <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda") & mpd.obs.z < (-1.96))
+table(xy$natBoth)
+
+
 prop.test(c(7,2,10),c(27,15,73),correct=F,alternative="greater")
 prop.test(c(7,12),c(27,88),correct=F,alternative="greater")
+prop.test(c(9,10),c(42,73),correct=F,alternative="greater")
+
 
 x.p <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & mpd.obs.z < (-2.33))
 table(x.p$natBoth)
