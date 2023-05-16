@@ -180,7 +180,7 @@ library(nonpar)
 lepage.test(zPlat1,zPlat2)
 
 library(misty)
-test.welch()
+
 ```
 
 Are the specialists acquired in hosts more related to invasives than the specialists not acquired?
