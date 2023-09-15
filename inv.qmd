@@ -358,7 +358,25 @@ zNatJ %<>% mutate(sg=if_else(mpd.obs.z>(-1.96),"g","s"))
 #density plot of specificity
 plot.zNatJ <- zNatJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda")) %>% ggplot(.,aes(x=mpd.obs.z,fill=as.factor(natBoth)))+geom_density(alpha=0.5,trim=T,col="gray50")+xlab("Phylogenetic specificity")+scale_fill_manual(name="Host type infected",labels=c("Native and exotic","Native only"),values=c("orange","skyblue"))+ylab("Density")+theme_classic()+ggtitle("Juvenile parasite stages")+theme(legend.position=c(0.15,0.5))+facet_wrap(~Phylum_parasite)+xlim(-6,1.5)+ylim(0,0.6)
 
+# can we say: Among platyhelminthes, generalist juveniles are more likely to infect exotic species {cost of specialism}
+zNatJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes")) %$% table(natBoth,sg)
+prop.test(x=c(0,11),n=c(9,39),alternative="less")
+# p-val >0.05, so strictly no
 
+# can we say: Juvenile stage parasites are more generalist than adult stage parasites
+# not much overlap on actual species, so paired t-test doesn't make sense
+t.test(zNatJ$mpd.obs.z[zNatJ$Phylum_parasite %in% c("Platyhelminthes","Nematoda")],zNat$mpd.obs.z[zNatJ$Phylum_parasite %in% c("Platyhelminthes","Nematoda")])
+
+
+# can we say: Among platyhelminthes, generalist adults are more likely to infect exotic species {cost of specialism}
+zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes")) %$% table(natBoth,sg)
+prop.test(x=c(6,6),n=c(31,56),alternative="less")
+# p-val >>0.05, so no
+
+# can we say: Among nematoda, generalist adults are more likely to infect exotic species {cost of specialism}
+zNat %>% dplyr::filter(Phylum_parasite %in% c("Nematoda")) %$% table(natBoth,sg)
+prop.test(x=c(3,4),n=c(11,17),alternative="less")
+# p-val >>0.05, so no
 
 ```
 
@@ -419,7 +437,7 @@ qJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda")) %>% g
 z.J0 <- qJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & infect==0)
 z.J1 <- qJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & infect==1)
 
-wilcox.test(z.J0,z.J1)
+#wilcox.test(z.J0,z.J1) #needs vectors not dataframes
 
 ```
 
@@ -465,5 +483,16 @@ table(y.p$natBoth)
 
 z.p <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & mpd.obs.z > (-2.33) & mpd.obs.z < (-1.96))
 table(z.p$natBoth)
+
+zNatLocReg <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda"))
+zNatLocReg %<>% mutate(exo=if_else(natBoth=="both",1,0),stage="Adult")
+##
+zNatLocRegJ <- zNatJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda"))
+zNatLocRegJ %<>% mutate(exo=if_else(natBoth=="both",1,0),stage="Juvenile")
+
+zNatLocReg %<>% bind_rows(.,zNatLocRegJ)
+zNatLocReg %<>% mutate(stage=factor(stage,levels=c("Juvenile","Adult")))
+zNatLocReg.plot <- zNatLocReg %>% ggplot(.,aes(x=mpd.obs.z,y=exo,col=Phylum_parasite))+geom_smooth(se=F,span=1.2)+geom_point(aes(col=Phylum_parasite))+facet_wrap(~stage,scales="free_x")+ylim(0,1)+xlab("[S] <- Parasite phylogenetic specificity -> [G]")+ylab("Probability of infecting exotic host species")+scale_color_discrete(name="Parasite phylum")+theme_classic()
+ggsave("localReg.png",zNatLocReg.plot,height=4,width=7)
 
 ```
