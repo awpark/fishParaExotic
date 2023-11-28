@@ -10,14 +10,16 @@ editor: visual
 knitr::opts_chunk$set(echo=F,message=F,warning=F,tidy=T)
 library(tidyverse)
 library(magrittr)
+library(ape) #plot tree
+library(picante) #evol distinct
 ```
 
 This analysis uses the data from García-Prieto et al. (2022) to study consequences of parasite specificity.
 
-First, we read in the host-parasite data
+First, we source the `paraPrep` file, which reads in the data, and harmonizes parasites names and taxonomy
 
-```{r readData}
-f <- read_csv("FISH_PARASITE_DATASET.csv")
+```{r sourceParaPrep}
+source(knitr::purl("inv.qmd"),quiet=T)
 ```
 
 Next, we read in a fish phylogenetic tree
@@ -27,6 +29,8 @@ library(ape)
 tree <- ape::read.tree("actinopt_12k_raxml.tre")
 
 ```
+
+
 
 ```{r filterAdult}
 f %<>% mutate(Stage=stringr::str_replace_all(Stage,"Adulto","Adult"))
@@ -49,12 +53,13 @@ m <- as.data.frame.matrix(table(fA$Parasite_species,fA$Host_species))
 
 Currently 56 missing fish (in database but not phylogeny)
 
-```{r}
+```{r eval=F}
+#CURRENTLY EVAL FALSE AS FISHBASE PACKAGE HAS DEVELOPED BUG
 # probably a fish synonym issue, but for now remove host species not in fish phylo
 missingFish <- setdiff(colnames(m),tree$tip.label)
 missingFishFormatted <- gsub("_"," ",missingFish)
 library(rfishbase)
-synCheck <- rfishbase::synonyms(missingFishFormatted)
+synCheck <- rfishbase::synonyms(missingFishFormatted,server="fishbase")
 synCheck %<>% dplyr::filter(Status %in% c("misapplied name","synonym")) %>% dplyr::select(synonym,Species)
 synCheck %<>% dplyr::mutate(across(.cols=everything(),~str_replace_all(.," ","_")))
 
@@ -172,14 +177,14 @@ zPlat2 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nemat
 
 wilcox.test(zPlat1,zPlat2)
 
-library(brunnermunzel)
+#library(brunnermunzel)
 
-brunnermunzel.test(zPlat1,zPlat2)
+#brunnermunzel.test(zPlat1,zPlat2)
 
-library(nonpar)
-lepage.test(zPlat1,zPlat2)
+#library(nonpar)
+#lepage.test(zPlat1,zPlat2)
 
-library(misty)
+#library(misty)
 
 ```
 
@@ -263,7 +268,8 @@ hostOfJuvParas <- gsub("_"," ",hostOfJuvParas)
 mJ <- as.data.frame.matrix(table(fJ$Parasite_species,fJ$Host_species))
 ```
 
-```{r}
+```{r eval=F}
+#FISHBASE PACKAGE HAS DEVELOPED A BUG
 # probably a fish synonym issue, but for now remove host species not in fish phylo
 missingFish <- setdiff(colnames(mJ),tree$tip.label)
 missingFishFormatted <- gsub("_"," ",missingFish)
@@ -496,3 +502,487 @@ zNatLocReg.plot <- zNatLocReg %>% ggplot(.,aes(x=mpd.obs.z,y=exo,col=Phylum_para
 ggsave("localReg.png",zNatLocReg.plot,height=4,width=7)
 
 ```
+
+```{r}
+# are exclusively 'exotic host' parasites taxonomically distinct from other parasites?
+
+exoParas #n=61
+exoParasJ #n=20
+natParas #n=375
+natParasJ #n=99
+onlyExoParas #n=30
+onlyExoParasJ #n=1
+
+onlyNatParas <- setdiff(natParas,exoParas)
+onlyNatParasJ <- setdiff(natParasJ,exoParasJ)
+
+bothParas <- setdiff(unique(c(exoParas,natParas)),unique(c(onlyExoParas,onlyNatParas)))
+bothParasJ <- setdiff(unique(c(exoParasJ,natParasJ)),unique(c(onlyExoParasJ,onlyNatParasJ)))
+
+taxDist <- tibble(para=character(0),hostSet=character(0))
+
+tmpExo <- tibble(onlyExoParas)
+tmpExo %<>% bind_cols(.,"exo")
+tmpExo %<>% dplyr::rename(para=onlyExoParas,hostSet=`...2`)
+
+tmpNat <- tibble(onlyNatParas)
+tmpNat %<>% bind_cols(.,"nat")
+tmpNat %<>% dplyr::rename(para=onlyNatParas,hostSet=`...2`)
+
+tmpBoth <- tibble(bothParas)
+tmpBoth %<>% bind_cols(.,"both")
+tmpBoth %<>% dplyr::rename(para=bothParas,hostSet=`...2`)
+
+taxDist %<>% bind_rows(.,tmpNat)
+taxDist %<>% bind_rows(.,tmpExo)
+taxDist %<>% bind_rows(.,tmpBoth)
+
+
+```
+
+
+```{r taxize, eval=F}
+##TAXIZE##
+library(taxize)
+paraTaxa <- taxize::classification(taxDist$para[1:3],db="gbif")
+save(paraTaxa,file="get_paraTaxa.Rda")
+```
+
+
+```{r loadParaTaxa}
+load("get_paraTaxa.Rda")
+```
+
+```{r}
+myTaxa <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0))
+for (i in 1:length(paraTaxa)){
+  thisDf <- paraTaxa[[i]]
+  kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
+  phylum <- thisDf$name[which(thisDf$rank=="phylum")]
+  class <- thisDf$name[which(thisDf$rank=="class")]
+  order <- thisDf$name[which(thisDf$rank=="order")]
+  family <- thisDf$name[which(thisDf$rank=="family")]
+  genus <- thisDf$name[which(thisDf$rank=="genus")]
+  species <- thisDf$name[which(thisDf$rank=="species")]
+  myTaxa %<>% add_case(kingdom=kingdom,phylum=phylum,class=class,order=order,family=family,genus=genus,species=species)
+}
+
+```
+
+
+
+
+```{r synonyms, eval=T}
+## a few tweaks for matchings
+idx <- which(taxDist$para=="Characithecium_costaricensis")
+taxDist$para[idx] <- "Characithecium_costaricense"
+
+idx <- which(taxDist$para=="Ekuarhuni_papillatum")
+taxDist$para[idx] <- "Ekuarhuni_papillatus"
+
+idx <- which(taxDist$para=="Essexiella_fimbriatum")
+taxDist$para[idx] <- "Essexiella_fimbriata"
+
+idx <- which(taxDist$para=="Philometroides_nodulosa")
+taxDist$para[idx] <- "Philometroides_nodulosus"
+
+idx <- which(taxDist$para=="Pseudoglaridacris_confusa")
+taxDist$para[idx] <- "Pseudoglaridacris_confusus"
+
+idx <- which(taxDist$para=="Pseudoparacreptotrema_axtlasensis")
+taxDist$para[idx] <- "Pseudoparacreptotrema_axtlaense"
+
+idx <- which(taxDist$para=="Ekuarhuni_mexicanum")
+taxDist$para[idx] <- "Ekuarhuni_mexicanus"
+	
+idx <- which(taxDist$para=="Gussevia_spilarocirra")
+taxDist$para[idx] <- "Gussevia_spiralocirra"
+
+
+
+##TAXIZE 2: PROBLEM SPECIES## NCBI
+all_paras <- gsub("_"," ",taxDist$para)
+problemParas <- setdiff(all_paras,myTaxa$species)
+paraTaxa2 <- taxize::classification(problemParas,db="ncbi")
+
+paraTaxa2 <- paraTaxa2[!is.na(paraTaxa2)]
+
+myTaxa2 <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0))
+for (i in 1:length(paraTaxa2)){
+  thisDf <- paraTaxa2[[i]]
+  kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
+  phylum <- thisDf$name[which(thisDf$rank=="phylum")]
+  class <- thisDf$name[which(thisDf$rank=="class")]
+  order <- thisDf$name[which(thisDf$rank=="order")]
+  family <- thisDf$name[which(thisDf$rank=="family")]
+  genus <- thisDf$name[which(thisDf$rank=="genus")]
+  species <- thisDf$name[which(thisDf$rank=="species")]
+  myTaxa2 %<>% add_case(kingdom=kingdom,phylum=phylum,class=class,order=order,family=family,genus=genus,species=species)
+}
+
+myTaxa %<>% bind_rows(.,myTaxa2)
+
+
+##TAXIZE 2: PROBLEM SPECIES## ITIS
+problemParas <- setdiff(all_paras,myTaxa$species)
+paraTaxa2 <- taxize::classification(problemParas,db="itis")
+
+paraTaxa2 <- paraTaxa2[!is.na(paraTaxa2)]
+
+myTaxa2 <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0))
+for (i in 1:length(paraTaxa2)){
+  thisDf <- paraTaxa2[[i]]
+  kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
+  phylum <- thisDf$name[which(thisDf$rank=="phylum")]
+  class <- thisDf$name[which(thisDf$rank=="class")]
+  order <- thisDf$name[which(thisDf$rank=="order")]
+  family <- thisDf$name[which(thisDf$rank=="family")]
+  genus <- thisDf$name[which(thisDf$rank=="genus")]
+  species <- thisDf$name[which(thisDf$rank=="species")]
+  myTaxa2 %<>% add_case(kingdom=kingdom,phylum=phylum,class=class,order=order,family=family,genus=genus,species=species)
+}
+
+myTaxa %<>% bind_rows(.,myTaxa2)
+
+##NOTE TROPICOS WANTS API KEY
+##NOTE NBN INVOKES CHROMISTA KINGDOM!
+##TAXIZE 2: PROBLEM SPECIES## WORMS
+problemParas <- setdiff(all_paras,myTaxa$species)
+paraTaxa2 <- taxize::classification(problemParas,db="worms")
+
+paraTaxa2 <- paraTaxa2[!is.na(paraTaxa2)]
+
+myTaxa2 <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0))
+for (i in 1:length(paraTaxa2)){
+  thisDf <- paraTaxa2[[i]]
+  kingdom <- thisDf$name[which(thisDf$rank=="Kingdom")]## NOTE THIS DB USES CAPITALIZATION
+  phylum <- thisDf$name[which(thisDf$rank=="Phylum")]
+  class <- thisDf$name[which(thisDf$rank=="Class")]
+  order <- thisDf$name[which(thisDf$rank=="Order")]
+  family <- thisDf$name[which(thisDf$rank=="Family")]
+  genus <- thisDf$name[which(thisDf$rank=="Genus")]
+  species <- thisDf$name[which(thisDf$rank=="Species")]
+  myTaxa2 %<>% add_case(kingdom=kingdom,phylum=phylum,class=class,order=order,family=family,genus=genus,species=species)
+}
+
+myTaxa %<>% bind_rows(.,myTaxa2)
+
+
+##NOTE NATSERV DOESN'T FIND ANY OF THE REMAINING PARAS (n=40)
+##NOTE BOLD DOESN'T WORK
+##NOTE WIKI USES STRANGE WORDS FOR KINGDOM ETC
+##TAXIZE 2: PROBLEM SPECIES## EOL
+problemParas <- setdiff(all_paras,myTaxa$species)
+paraTaxa2 <- taxize::classification(problemParas,db="eol")
+
+paraTaxa2 <- paraTaxa2[!is.na(paraTaxa2)]
+
+myTaxa2 <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0))
+for (i in 1:length(paraTaxa2)){
+  thisDf <- paraTaxa2[[i]]
+  if (dim(thisDf)[1]==7){
+  kingdom <- thisDf$name[1]##NOTE THIS DB DOESN'T CONSISTENTLY USE RANK NAMES
+  phylum <- thisDf$name[2]
+  class <- thisDf$name[3]
+  order <- thisDf$name[4]
+  family <- thisDf$name[5]
+  genus <- thisDf$name[6]
+  species <- thisDf$name[7]
+  }
+  else{
+  kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
+  phylum <- thisDf$name[which(thisDf$rank=="phylum")]
+  class <- thisDf$name[which(thisDf$rank=="class")]
+  order <- thisDf$name[which(thisDf$rank=="order")]
+  family <- thisDf$name[which(thisDf$rank=="family")]
+  genus <- thisDf$name[which(thisDf$rank=="genus")]
+  species <- thisDf$name[which(thisDf$rank=="species")]
+  }
+   myTaxa2 %<>% add_case(kingdom=kingdom,phylum=phylum,class=class,order=order,family=family,genus=genus,species=species)
+}
+
+myTaxa2$kingdom <- "Animalia"
+
+myTaxa2 %<>% rowwise() %>% dplyr::mutate(phylum=strsplit(phylum,split=" ")[[1]][1])
+myTaxa2 %<>% rowwise() %>% dplyr::mutate(order=strsplit(order,split=" ")[[1]][1])
+myTaxa2 %<>% rowwise() %>% dplyr::mutate(family=strsplit(family,split=" ")[[1]][1])
+myTaxa2 %<>% rowwise() %>% dplyr::mutate(genus=strsplit(genus,split=" ")[[1]][1])
+myTaxa2 %<>% rowwise() %>% dplyr::mutate(species=paste(strsplit(species," ")[[1]][1],strsplit(species," ")[[1]][2]))
+
+myTaxa %<>% bind_rows(.,myTaxa2)
+
+problemParas <- setdiff(all_paras,myTaxa$species)
+
+## set subspecies to species
+idx <- which(problemParas=="Rhabdochona kidderi texensis")
+problemParas[idx] <- "Rhabdochona kidderi"
+
+##TAXIZE 2: PROBLEM SPECIES## NCBI
+paraTaxa2 <- taxize::classification(problemParas,db="ncbi")
+
+paraTaxa2 <- paraTaxa2[!is.na(paraTaxa2)]
+
+myTaxa2 <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0))
+for (i in 1:length(paraTaxa2)){
+  thisDf <- paraTaxa2[[i]]
+  kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
+  phylum <- thisDf$name[which(thisDf$rank=="phylum")]
+  class <- thisDf$name[which(thisDf$rank=="class")]
+  order <- thisDf$name[which(thisDf$rank=="order")]
+  family <- thisDf$name[which(thisDf$rank=="family")]
+  genus <- thisDf$name[which(thisDf$rank=="genus")]
+  species <- names(paraTaxa2)[i]
+  myTaxa2 %<>% add_case(kingdom=kingdom,phylum=phylum,class=class,order=order,family=family,genus=genus,species=species)
+}
+
+myTaxa2$kingdom <- "Animalia"
+
+myTaxa %<>% bind_rows(.,myTaxa2)
+
+problemParas <- setdiff(all_paras,myTaxa$species)
+
+myTaxa$kingdom <- "Animalia"
+myTaxa %<>% distinct()
+
+##genus matching
+# : Genarchella tropica
+idx <- which(myTaxa$species=="Genarchella isabellae")
+myTaxa %<>% add_case(kingdom=myTaxa$kingdom[idx],
+                     phylum=myTaxa$phylum[idx],
+                     class=myTaxa$class[idx],
+                     order=myTaxa$order[idx],
+                     family=myTaxa$family[idx],
+                     genus=myTaxa$genus[idx],
+                     species="Genarchella tropica")
+
+##spelling mistake in raw data
+
+
+
+
+##### SORT OUT PLURAL HIGHER TAXA ISSUE
+## EG Gonarchella are listed under different orders
+
+#> sort(problemParas)
+#[1] "Freitascapillaria moraveci"   "Genarchella tropica"          "Isoglaridacris brevicollis"  
+#[4] "Mecoderus oligoplites"        "Megalogonia ictaruri"         "Philometra poblana"          
+#[7] "Rhabdochona kidderi texensis" "Spinitectus mariaisabelae"    "Wallinia chavarriai" 
+
+# Megalogonia icta*L*uri
+
+```
+
+```{r}
+frm <- ~kingdom/phylum/class/order/family/genus/species
+
+myTaxa %<>% mutate(species=as.factor(species))
+myTaxa %<>% mutate(genus=as.factor(genus))
+myTaxa %<>% mutate(family=as.factor(family))
+myTaxa %<>% mutate(order=as.factor(order))
+myTaxa %<>% mutate(class=as.factor(class))
+myTaxa %<>% mutate(phylum=as.factor(phylum))
+myTaxa %<>% mutate(kingdom=as.factor(kingdom))
+
+tr <- as.phylo(frm, data = myTaxa, collapse=FALSE)
+tr$edge.length <- rep(1, nrow(tr$edge))
+plot.phylo(tr,show.tip.label = F,show.node.label = T,font=3,cex=0.5)
+
+
+
+
+	
+tr2 <- ape::root(tr,outgroup=c("Piscicolaria reducta","Myzobdella lugubris","Myzobdella patzcuarensis"),resolve.root=T)
+plot.phylo(tr2,show.tip.label = F,show.node.label = T,font=3,cex=0.5)
+## evol distinctiveness of parasites
+
+
+#ed <- picante::evol.distinct(tr2,type="equal.split")
+
+library(caper)
+
+ed <- caper::ed.calc(tr)
+ed <- ed$spp
+
+para4join <- taxDist %>% rename(species=para)
+para4join %<>% mutate(species=str_replace_all(species,"_"," "))
+
+ed %<>% left_join(.,para4join)
+
+ed %>% ggplot(.,aes(x=as.factor(hostSet),y=ED))+geom_boxplot()
+
+library(ggtree)
+
+```
+
+
+```{r pairwise, eval=F}
+###pairwise dist
+
+myPairs <- tibble(sp1=character(0),sp2=character(0),setComparison=character(0),highestSharedRank=character(0))
+
+for (i in 1:dim(myTaxa)[1]){
+  for (j in i:dim(myTaxa)[1]){
+    if (i!=j){
+      #obtain Genus species and Genus_species
+      sp1 <- myTaxa$species[i]
+      sp2 <- myTaxa$species[j]
+      sp_1 <- gsub(" ","_",sp1)
+      sp_2 <- gsub(" ","_",sp2)
+      #look up each parasite's set
+      idx1 <- which(taxDist$para==sp_1)
+      idx2 <- which(taxDist$para==sp_2)
+      # define set comparison
+      if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="exo"){
+        setComparison <- "exo-exo"
+      }
+      if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="nat"){
+        setComparison <- "exo-nat"
+      }
+      if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="exo"){
+        setComparison <- "exo-nat"
+      }
+      if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="both"){
+        setComparison <- "exo-both"
+      }
+      if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="exo"){
+        setComparison <- "exo-both"
+      }
+      if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="nat"){
+        setComparison <- "nat-nat"
+      }
+      if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="both"){
+        setComparison <- "nat-both"
+      }
+      if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="nat"){
+        setComparison <- "nat-both"
+      }
+      if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="both"){
+        setComparison <- "both-both"
+      }
+      
+      rnkTF <- NULL
+      
+      
+      for (k in 1:7){#the 7 taxonomic ranks
+        rnkTF <- c(rnkTF,myTaxa[i,k]==myTaxa[j,k])
+      }
+      highestSharedRank <- colnames(myTaxa)[which(diff(rnkTF)==-1)]
+      myPairs %<>% add_case(sp1=sp1,sp2=sp2,setComparison=setComparison,highestSharedRank=highestSharedRank)
+    }
+  }
+}
+
+myPairs %<>% mutate(highestSharedRank=factor(highestSharedRank,levels=c("kingdom","phylum","class","order","family","genus")))
+
+myPairs %<>% mutate(setComparison=factor(setComparison,levels=c("nat-nat","nat-both","both-both","exo-nat","exo-both","exo-exo")))
+save(myPairs,file="get_myPairs.Rda")
+```
+
+```{r}
+load("get_myPairs.Rda")
+myPairs %>% ggplot(.,aes(setComparison,fill=highestSharedRank))+geom_bar(position="fill")
+
+myPairs %<>% dplyr::mutate(dist=0)
+
+for (i in 1:dim(myPairs)[1]){
+  if (myPairs$highestSharedRank[i]=="kingdom"){myPairs$dist[i] <- 6}
+  if (myPairs$highestSharedRank[i]=="phylum") {myPairs$dist[i] <- 5}
+  if (myPairs$highestSharedRank[i]=="class")  {myPairs$dist[i] <- 4}
+  if (myPairs$highestSharedRank[i]=="order")  {myPairs$dist[i] <- 3}
+  if (myPairs$highestSharedRank[i]=="family") {myPairs$dist[i] <- 2}
+  if (myPairs$highestSharedRank[i]=="genus")  {myPairs$dist[i] <- 1}
+}
+
+myPairs %>% ggplot(.,aes(x=setComparison,y=dist))+geom_violin()
+
+
+
+
+
+```
+
+
+```{r treeTips}
+
+tips <- as.data.frame(tr$tip.label)
+tips %<>% dplyr::rename(para=`tr$tip.label`)
+hostSet4join <- taxDist %>% mutate(para=str_replace_all(para,"_"," "))
+tips %<>% left_join(.,hostSet4join)
+
+cladeEXObranches<-which.edge(tr,which(tips$hostSet=="exo"))
+cladeNATbranches<-which.edge(tr,which(tips$hostSet=="nat"))
+cladeBOTHbranches<-which.edge(tr,which(tips$hostSet=="both"))
+
+my.edge.colors<-rep("gray20",length(tr$edge.length))
+my.edge.colors[cladeEXObranches]<-"dodgerblue3"
+my.edge.colors[cladeNATbranches]<-"gray80"
+my.edge.colors[cladeBOTHbranches]<-"brown"
+
+plot(tr,show.tip.label=T,edge.color=my.edge.colors,edge.width=0.5,direction="rightwards",cex=0.3,label.offset=0)#,x.lim=c(0,1200))
+
+
+comm <- as.data.frame.matrix(table(taxDist$para,taxDist$hostSet))
+comm <- 1*(comm>0)
+rownames(comm) <- gsub("_"," ",rownames(comm))
+#get the nri (net relatedness index)
+library(picante)
+nri <-ses.mpd(t(comm),tr,null.model="independentswap",runs=1000,abundance.weighted=F)#change back to 1000!
+
+
+
+```
+
+```{r eval=F}
+#traits of 'best hosts'?
+library(rfishbase)
+z <- rfishbase::diet(tips$para[1])
+
+
+tmp <- rfishbase::popchar(hostOfAdultParas)
+
+tmp %>% ggplot(.,aes(x=Lmax,y=Wmax))+geom_point()
+tmp %>% ggplot(.,aes(x=Lmax,y=tmax))+geom_point()
+tmp %>% ggplot(.,aes(x=tmax,y=Wmax))+geom_point()
+
+
+#as a look-see, get the most specialist parasite (adult-stage)
+#Salsuginus_angularis
+# and the most generalist (with at least 5 host species)
+#Magnivitellinum_simplex
+#what sort of hosts do they use
+hostsOfSpec <- fA %>% dplyr::filter(Parasite_species=="Salsuginus_angularis") %>% dplyr::select(Host_species) %>% distinct() %>% pull()
+hostsOfGen <- fA %>% dplyr::filter(Parasite_species=="Magnivitellinum_simplex") %>% dplyr::select(Host_species) %>% distinct() %>% pull()
+
+hostsOfSpec <- gsub("_"," ",hostsOfSpec)
+hostsOfGen <- gsub("_"," ",hostsOfGen)
+popCharSpec <- rfishbase::popchar(hostsOfSpec)
+popCharGen <- rfishbase::popchar(hostsOfGen)
+
+hostTraits <- tibble(Parasite_species=character(0),
+                     maxLmax=numeric(0),
+                     maxWmax=numeric(0),
+                     maxTmax=numeric(0))
+
+for (i in 1:dim(zNat)[1]){
+  thisPara <- zNat$Parasite_species[i]
+  hostsOfThisPara <- fA %>% dplyr::filter(Parasite_species==thisPara) %>% dplyr::select(Host_species) %>% distinct() %>% pull()
+  hostsOfThisPara <- gsub("_"," ",hostsOfThisPara)
+  popCharThisPara <- rfishbase::popchar(hostsOfThisPara)
+  if (dim(popCharThisPara)[1]>0){
+  lengthHostsThisPara <- max(popCharThisPara$Lmax,na.rm=T)
+  weightHostsThisPara <- max(popCharThisPara$Wmax,na.rm=T)
+  longevHostsThisPara <- max(popCharThisPara$tmax,na.rm=T)
+  hostTraits %<>% add_case(Parasite_species=thisPara,
+                           maxLmax=lengthHostsThisPara,
+                           maxWmax=weightHostsThisPara,
+                           maxTmax=longevHostsThisPara)
+  }
+}
+
+zNat4Join <- zNat %>% dplyr::select(Parasite_species,Phylum_parasite,mpd.obs.z)
+hostTraits %<>% left_join(.,zNat4Join)
+
+hostTraits %>% ggplot(.,aes(x=mpd.obs.z,y=maxTmax))+geom_point()+geom_smooth()
+
+```
+
