@@ -1,10 +1,4 @@
----
-title: "Parasite specificty determines infection of exotic fish species"
-format: html
-editor: visual
----
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------
 #| label: "setup"
 #| include: false
 knitr::opts_chunk$set(echo=F,message=F,warning=F,tidy=T)
@@ -12,25 +6,19 @@ library(tidyverse)
 library(magrittr)
 library(ape) #plot tree
 library(picante) #evol distinct
-```
 
-This analysis uses the data from García-Prieto et al. (2022) to study consequences of parasite specificity.
 
-First, we source the `paraPrep` file, which reads in the data, and harmonizes parasites names and taxonomy
+## ----sourceParaPrep------------------------------------------------------------------------------------------------
+source(knitr::purl("inv.qmd"),quiet=T)
 
-```{r sourceParaPrep}
-source(knitr::purl("paraPrep.qmd",quiet=T))
-```
 
-Next, we read in a fish phylogenetic tree
-
-```{r readFishPhylo}
+## ----readFishPhylo-------------------------------------------------------------------------------------------------
 library(ape)
 tree <- ape::read.tree("actinopt_12k_raxml.tre")
 
-```
 
-```{r filterAdult}
+
+## ----filterAdult---------------------------------------------------------------------------------------------------
 f %<>% mutate(Stage=stringr::str_replace_all(Stage,"Adulto","Adult"))
 fA <- f %>% dplyr::filter(Stage=="Adult")
 
@@ -40,52 +28,46 @@ fA %<>% dplyr::filter(grepl("sp\\.",Parasite_species)==F)
 
 hostOfAdultParas <- fA %>% dplyr::select(Host_species) %>% distinct() %>% pull()
 hostOfAdultParas <- gsub("_"," ",hostOfAdultParas)
-```
 
-We create a host-parasite matrix
 
-```{r createHPmatrix}
+## ----createHPmatrix------------------------------------------------------------------------------------------------
 # matrix of host-(adult)parasite associations
 m <- as.data.frame.matrix(table(fA$Parasite_species,fA$Host_species))
-```
-
-Currently 56 missing fish (in database but not phylogeny)
-
-```{r eval=F}
-#CURRENTLY EVAL FALSE AS FISHBASE PACKAGE HAS DEVELOPED BUG
-# probably a fish synonym issue, but for now remove host species not in fish phylo
-missingFish <- setdiff(colnames(m),tree$tip.label)
-missingFishFormatted <- gsub("_"," ",missingFish)
-library(rfishbase)
-synCheck <- rfishbase::synonyms(missingFishFormatted,server="fishbase")
-synCheck %<>% dplyr::filter(Status %in% c("misapplied name","synonym")) %>% dplyr::select(synonym,Species)
-synCheck %<>% dplyr::mutate(across(.cols=everything(),~str_replace_all(.," ","_")))
-
-idx.1 <- which(fA$Host_species==synCheck$synonym[1])#identifies synomym mathcing in tree
-idx.2 <- which(fA$Host_species==synCheck$synonym[2])# does not
-idx.3 <- which(fA$Host_species==synCheck$synonym[3])# does not
-
-#remove found fish from missing fish
-idx.foundFish <- which(missingFish==synCheck$synonym[1])
-missingFish <- missingFish[-idx.foundFish]
-missingFishFormatted <- gsub("_"," ",missingFish)
 
 
-fA$Host_species[idx.1] <- synCheck$Species[1]
-#idx.2 and idx.3 didn't recover a useful synonym
+## ----eval=F--------------------------------------------------------------------------------------------------------
+## #CURRENTLY EVAL FALSE AS FISHBASE PACKAGE HAS DEVELOPED BUG
+## # probably a fish synonym issue, but for now remove host species not in fish phylo
+## missingFish <- setdiff(colnames(m),tree$tip.label)
+## missingFishFormatted <- gsub("_"," ",missingFish)
+## library(rfishbase)
+## synCheck <- rfishbase::synonyms(missingFishFormatted,server="fishbase")
+## synCheck %<>% dplyr::filter(Status %in% c("misapplied name","synonym")) %>% dplyr::select(synonym,Species)
+## synCheck %<>% dplyr::mutate(across(.cols=everything(),~str_replace_all(.," ","_")))
+## 
+## idx.1 <- which(fA$Host_species==synCheck$synonym[1])#identifies synomym mathcing in tree
+## idx.2 <- which(fA$Host_species==synCheck$synonym[2])# does not
+## idx.3 <- which(fA$Host_species==synCheck$synonym[3])# does not
+## 
+## #remove found fish from missing fish
+## idx.foundFish <- which(missingFish==synCheck$synonym[1])
+## missingFish <- missingFish[-idx.foundFish]
+## missingFishFormatted <- gsub("_"," ",missingFish)
+## 
+## 
+## fA$Host_species[idx.1] <- synCheck$Species[1]
+## #idx.2 and idx.3 didn't recover a useful synonym
+## 
+## # recalculate matrix of host-(adult)parasite associations
+## m <- as.data.frame.matrix(table(fA$Parasite_species,fA$Host_species))
+## 
+## # for now we remove from host-parasite data those fish species that are not found in the phylogenetic tree
+## fA %<>% dplyr::filter(!Host_species %in% missingFish)
+## #reCalc fParas now some species removed
+## fParas <- fA %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
 
-# recalculate matrix of host-(adult)parasite associations
-m <- as.data.frame.matrix(table(fA$Parasite_species,fA$Host_species))
 
-# for now we remove from host-parasite data those fish species that are not found in the phylogenetic tree
-fA %<>% dplyr::filter(!Host_species %in% missingFish)
-#reCalc fParas now some species removed
-fParas <- fA %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
-```
-
-Are the parasites of exotic fish species (that are also parasites of native fish species) a non-random sample?
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------
 
 exoParas <- fA %>% dplyr::filter(Exotic_or_native=="Exotic") %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
 natParas <- fA %>% dplyr::filter(Exotic_or_native=="Native") %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
@@ -129,14 +111,14 @@ idx <- which(colnames(mNat) %in% colnames(phydist.nat))
 mNat <- mNat[,idx]
 idx <- which(rowSums(mNat)!=0)
 mNat <- mNat[idx,]
-```
 
-```{r eval=FALSE}
-zNat <- picante::ses.mpd(mNat,phydist.nat,null.model="independentswap",runs=1000,abundance.weighted=F)
-save(zNat,file="get_zNat.Rda")
-```
 
-```{r}
+## ----eval=FALSE----------------------------------------------------------------------------------------------------
+## zNat <- picante::ses.mpd(mNat,phydist.nat,null.model="independentswap",runs=1000,abundance.weighted=F)
+## save(zNat,file="get_zNat.Rda")
+
+
+## ------------------------------------------------------------------------------------------------------------------
 load("get_zNat.Rda")
 zNat %<>% mutate(Parasite_species=rownames(.))
 
@@ -184,11 +166,9 @@ wilcox.test(zPlat1,zPlat2)
 
 #library(misty)
 
-```
 
-Are the specialists acquired in hosts more related to invasives than the specialists not acquired?
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------
 
 exoHosts <- fA %>% dplyr::filter(Exotic_or_native=="Exotic") %>% dplyr::select(Host_species) %>% distinct() %>% pull()
 q <- expand_grid(para=zNat$Parasite_species,exotic=exoHosts)
@@ -245,11 +225,9 @@ plot.PDA <- q %>% dplyr::filter(Phylum_parasite %in% c("Nematoda","Platyhelminth
 
 q %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda")) %>% ggplot(.,aes(x=mpd.obs.z, y=infect))+geom_point()+stat_smooth(method="loess",span=1,se=FALSE)+scale_y_sqrt()#+ylim(0,0.25)
 
-```
 
-Similar analysis for the juvenile stages of parasites
 
-```{r filterJuvenile}
+## ----filterJuvenile------------------------------------------------------------------------------------------------
 f %<>% mutate(Stage=stringr::str_replace_all(Stage,"Juvenile","Larva"))
 fJ <- f %>% dplyr::filter(Stage=="Larva")
 
@@ -259,48 +237,46 @@ fJ %<>% dplyr::filter(grepl("sp\\.",Parasite_species)==F)
 
 hostOfJuvParas <- fJ %>% dplyr::select(Host_species) %>% distinct() %>% pull()
 hostOfJuvParas <- gsub("_"," ",hostOfJuvParas)
-```
 
-```{r createHPmatrixJuv}
+
+## ----createHPmatrixJuv---------------------------------------------------------------------------------------------
 # matrix of host-(adult)parasite associations
 mJ <- as.data.frame.matrix(table(fJ$Parasite_species,fJ$Host_species))
-```
-
-```{r eval=F}
-#FISHBASE PACKAGE HAS DEVELOPED A BUG
-# probably a fish synonym issue, but for now remove host species not in fish phylo
-missingFish <- setdiff(colnames(mJ),tree$tip.label)
-missingFishFormatted <- gsub("_"," ",missingFish)
-synCheck <- rfishbase::synonyms(missingFishFormatted)
-synCheck %<>% dplyr::filter(Status %in% c("misapplied name","synonym")) %>% dplyr::select(synonym,Species)
-synCheck %<>% dplyr::mutate(across(.cols=everything(),~str_replace_all(.," ","_")))
-
-idx.1 <- which(fJ$Host_species==synCheck$synonym[1])#identifies synomym mathcing in tree
-idx.2 <- which(fJ$Host_species==synCheck$synonym[2])# does not
-idx.3 <- which(fJ$Host_species==synCheck$synonym[3])# does not
-
-#remove found fish from missing fish
-idx.foundFish <- which(missingFish %in% synCheck$synonym)
-missingFish <- missingFish[-idx.foundFish]
-missingFishFormatted <- gsub("_"," ",missingFish)
 
 
-fJ$Host_species[idx.1] <- synCheck$Species[1]
-fJ$Host_species[idx.2] <- synCheck$Species[2]
-fJ$Host_species[idx.3] <- synCheck$Species[3]
+## ----eval=F--------------------------------------------------------------------------------------------------------
+## #FISHBASE PACKAGE HAS DEVELOPED A BUG
+## # probably a fish synonym issue, but for now remove host species not in fish phylo
+## missingFish <- setdiff(colnames(mJ),tree$tip.label)
+## missingFishFormatted <- gsub("_"," ",missingFish)
+## synCheck <- rfishbase::synonyms(missingFishFormatted)
+## synCheck %<>% dplyr::filter(Status %in% c("misapplied name","synonym")) %>% dplyr::select(synonym,Species)
+## synCheck %<>% dplyr::mutate(across(.cols=everything(),~str_replace_all(.," ","_")))
+## 
+## idx.1 <- which(fJ$Host_species==synCheck$synonym[1])#identifies synomym mathcing in tree
+## idx.2 <- which(fJ$Host_species==synCheck$synonym[2])# does not
+## idx.3 <- which(fJ$Host_species==synCheck$synonym[3])# does not
+## 
+## #remove found fish from missing fish
+## idx.foundFish <- which(missingFish %in% synCheck$synonym)
+## missingFish <- missingFish[-idx.foundFish]
+## missingFishFormatted <- gsub("_"," ",missingFish)
+## 
+## 
+## fJ$Host_species[idx.1] <- synCheck$Species[1]
+## fJ$Host_species[idx.2] <- synCheck$Species[2]
+## fJ$Host_species[idx.3] <- synCheck$Species[3]
+## 
+## # recalculate matrix of host-(juv)parasite associations
+## mJ <- as.data.frame.matrix(table(fJ$Parasite_species,fJ$Host_species))
+## 
+## # for now we remove from host-parasite data those fish species that are not found in the phylogenetic tree
+## fJ %<>% dplyr::filter(!Host_species %in% missingFish)
+## #reCalc fParas now some species removed
+## fParasJ <- fJ %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
 
-# recalculate matrix of host-(juv)parasite associations
-mJ <- as.data.frame.matrix(table(fJ$Parasite_species,fJ$Host_species))
 
-# for now we remove from host-parasite data those fish species that are not found in the phylogenetic tree
-fJ %<>% dplyr::filter(!Host_species %in% missingFish)
-#reCalc fParas now some species removed
-fParasJ <- fJ %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
-```
-
-Are the (juvenile) parasites of exotic fish species (that are also parasites of native fish species) a non-random sample?
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------
 
 exoParasJ <- fJ %>% dplyr::filter(Exotic_or_native=="Exotic") %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
 natParasJ <- fJ %>% dplyr::filter(Exotic_or_native=="Native") %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
@@ -341,14 +317,14 @@ idx <- which(colnames(mNatJ) %in% colnames(phydist.natJ))
 mNatJ <- mNatJ[,idx]
 idx <- which(rowSums(mNatJ)!=0)
 mNatJ <- mNatJ[idx,]
-```
 
-```{r eval=FALSE}
-zNatJ <- picante::ses.mpd(mNatJ,phydist.natJ,null.model="independentswap",runs=1000,abundance.weighted=F)
-save(zNatJ,file="get_zNatJ.Rda")
-```
 
-```{r}
+## ----eval=FALSE----------------------------------------------------------------------------------------------------
+## zNatJ <- picante::ses.mpd(mNatJ,phydist.natJ,null.model="independentswap",runs=1000,abundance.weighted=F)
+## save(zNatJ,file="get_zNatJ.Rda")
+
+
+## ------------------------------------------------------------------------------------------------------------------
 load("get_zNatJ.Rda")
 zNatJ %<>% mutate(Parasite_species=rownames(.))
 
@@ -382,9 +358,9 @@ zNat %>% dplyr::filter(Phylum_parasite %in% c("Nematoda")) %$% table(natBoth,sg)
 prop.test(x=c(3,4),n=c(11,17),alternative="less")
 # p-val >>0.05, so no
 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------
 
 exoHostsJ <- fJ %>% dplyr::filter(Exotic_or_native=="Exotic") %>% dplyr::select(Host_species) %>% distinct() %>% pull()
 qJ <- expand_grid(para=zNatJ$Parasite_species,exotic=exoHostsJ)
@@ -443,19 +419,19 @@ z.J1 <- qJ %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & infect=
 
 #wilcox.test(z.J0,z.J1) #needs vectors not dataframes
 
-```
-
-```{r eval=F}
-library(patchwork)
-plot.zNat <- plot.zNatJ/plot.zNatA
-ggsave("plot.zNat.png",height=4,width=7)
 
 
-plot.PD <- plot.PDJ/plot.PDA
-ggsave("plot.PD.png",height=4,width=7)
-```
+## ----eval=F--------------------------------------------------------------------------------------------------------
+## library(patchwork)
+## plot.zNat <- plot.zNatJ/plot.zNatA
+## ggsave("plot.zNat.png",height=4,width=7)
+## 
+## 
+## plot.PD <- plot.PDJ/plot.PDA
+## ggsave("plot.PD.png",height=4,width=7)
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------
 #extreme specialists
 
 x <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda") & mpd.obs.z < (-2.33))
@@ -499,9 +475,9 @@ zNatLocReg %<>% mutate(stage=factor(stage,levels=c("Juvenile","Adult")))
 zNatLocReg.plot <- zNatLocReg %>% ggplot(.,aes(x=mpd.obs.z,y=exo,col=Phylum_parasite))+geom_smooth(se=F,span=1.2)+geom_point(aes(col=Phylum_parasite))+facet_wrap(~stage,scales="free_x")+ylim(0,1)+xlab("[S] <- Parasite phylogenetic specificity -> [G]")+ylab("Probability of infecting exotic host species")+scale_color_discrete(name="Parasite phylum")+theme_classic()
 ggsave("localReg.png",zNatLocReg.plot,height=4,width=7)
 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------
 # are exclusively 'exotic host' parasites taxonomically distinct from other parasites?
 
 exoParas #n=61
@@ -536,20 +512,20 @@ taxDist %<>% bind_rows(.,tmpExo)
 taxDist %<>% bind_rows(.,tmpBoth)
 
 
-```
 
-```{r taxize, eval=F}
-##TAXIZE##
-library(taxize)
-paraTaxa <- taxize::classification(taxDist$para[1:3],db="gbif")
-save(paraTaxa,file="get_paraTaxa.Rda")
-```
 
-```{r loadParaTaxa}
+## ----taxize, eval=F------------------------------------------------------------------------------------------------
+## ##TAXIZE##
+## library(taxize)
+## paraTaxa <- taxize::classification(taxDist$para[1:3],db="gbif")
+## save(paraTaxa,file="get_paraTaxa.Rda")
+
+
+## ----loadParaTaxa--------------------------------------------------------------------------------------------------
 load("get_paraTaxa.Rda")
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------
 myTaxa <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0))
 for (i in 1:length(paraTaxa)){
   thisDf <- paraTaxa[[i]]
@@ -563,9 +539,9 @@ for (i in 1:length(paraTaxa)){
   myTaxa %<>% add_case(kingdom=kingdom,phylum=phylum,class=class,order=order,family=family,genus=genus,species=species)
 }
 
-```
 
-```{r synonyms, eval=T}
+
+## ----synonyms, eval=T----------------------------------------------------------------------------------------------
 ## a few tweaks for matchings
 idx <- which(taxDist$para=="Characithecium_costaricensis")
 taxDist$para[idx] <- "Characithecium_costaricense"
@@ -763,9 +739,9 @@ myTaxa %<>% add_case(kingdom=myTaxa$kingdom[idx],
 
 # Megalogonia icta*L*uri
 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------
 frm <- ~kingdom/phylum/class/order/family/genus/species
 
 myTaxa %<>% mutate(species=as.factor(species))
@@ -805,72 +781,72 @@ ed %>% ggplot(.,aes(x=as.factor(hostSet),y=ED))+geom_boxplot()
 
 library(ggtree)
 
-```
 
-```{r pairwise, eval=F}
-###pairwise dist
 
-myPairs <- tibble(sp1=character(0),sp2=character(0),setComparison=character(0),highestSharedRank=character(0))
+## ----pairwise, eval=F----------------------------------------------------------------------------------------------
+## ###pairwise dist
+## 
+## myPairs <- tibble(sp1=character(0),sp2=character(0),setComparison=character(0),highestSharedRank=character(0))
+## 
+## for (i in 1:dim(myTaxa)[1]){
+##   for (j in i:dim(myTaxa)[1]){
+##     if (i!=j){
+##       #obtain Genus species and Genus_species
+##       sp1 <- myTaxa$species[i]
+##       sp2 <- myTaxa$species[j]
+##       sp_1 <- gsub(" ","_",sp1)
+##       sp_2 <- gsub(" ","_",sp2)
+##       #look up each parasite's set
+##       idx1 <- which(taxDist$para==sp_1)
+##       idx2 <- which(taxDist$para==sp_2)
+##       # define set comparison
+##       if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="exo"){
+##         setComparison <- "exo-exo"
+##       }
+##       if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="nat"){
+##         setComparison <- "exo-nat"
+##       }
+##       if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="exo"){
+##         setComparison <- "exo-nat"
+##       }
+##       if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="both"){
+##         setComparison <- "exo-both"
+##       }
+##       if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="exo"){
+##         setComparison <- "exo-both"
+##       }
+##       if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="nat"){
+##         setComparison <- "nat-nat"
+##       }
+##       if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="both"){
+##         setComparison <- "nat-both"
+##       }
+##       if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="nat"){
+##         setComparison <- "nat-both"
+##       }
+##       if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="both"){
+##         setComparison <- "both-both"
+##       }
+## 
+##       rnkTF <- NULL
+## 
+## 
+##       for (k in 1:7){#the 7 taxonomic ranks
+##         rnkTF <- c(rnkTF,myTaxa[i,k]==myTaxa[j,k])
+##       }
+##       highestSharedRank <- colnames(myTaxa)[which(diff(rnkTF)==-1)]
+##       myPairs %<>% add_case(sp1=sp1,sp2=sp2,setComparison=setComparison,highestSharedRank=highestSharedRank)
+##     }
+##   }
+## }
+## 
+## myPairs %<>% mutate(highestSharedRank=factor(highestSharedRank,levels=c("kingdom","phylum","class","order","family","genus")))
+## 
+## myPairs %<>% mutate(setComparison=factor(setComparison,levels=c("nat-nat","nat-both","both-both","exo-nat","exo-both","exo-exo")))
+## save(myPairs,file="get_myPairs.Rda")
 
-for (i in 1:dim(myTaxa)[1]){
-  for (j in i:dim(myTaxa)[1]){
-    if (i!=j){
-      #obtain Genus species and Genus_species
-      sp1 <- myTaxa$species[i]
-      sp2 <- myTaxa$species[j]
-      sp_1 <- gsub(" ","_",sp1)
-      sp_2 <- gsub(" ","_",sp2)
-      #look up each parasite's set
-      idx1 <- which(taxDist$para==sp_1)
-      idx2 <- which(taxDist$para==sp_2)
-      # define set comparison
-      if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="exo"){
-        setComparison <- "exo-exo"
-      }
-      if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="nat"){
-        setComparison <- "exo-nat"
-      }
-      if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="exo"){
-        setComparison <- "exo-nat"
-      }
-      if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="both"){
-        setComparison <- "exo-both"
-      }
-      if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="exo"){
-        setComparison <- "exo-both"
-      }
-      if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="nat"){
-        setComparison <- "nat-nat"
-      }
-      if (taxDist$hostSet[idx1]=="nat" & taxDist$hostSet[idx2]=="both"){
-        setComparison <- "nat-both"
-      }
-      if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="nat"){
-        setComparison <- "nat-both"
-      }
-      if (taxDist$hostSet[idx1]=="both" & taxDist$hostSet[idx2]=="both"){
-        setComparison <- "both-both"
-      }
-      
-      rnkTF <- NULL
-      
-      
-      for (k in 1:7){#the 7 taxonomic ranks
-        rnkTF <- c(rnkTF,myTaxa[i,k]==myTaxa[j,k])
-      }
-      highestSharedRank <- colnames(myTaxa)[which(diff(rnkTF)==-1)]
-      myPairs %<>% add_case(sp1=sp1,sp2=sp2,setComparison=setComparison,highestSharedRank=highestSharedRank)
-    }
-  }
-}
 
-myPairs %<>% mutate(highestSharedRank=factor(highestSharedRank,levels=c("kingdom","phylum","class","order","family","genus")))
-
-myPairs %<>% mutate(setComparison=factor(setComparison,levels=c("nat-nat","nat-both","both-both","exo-nat","exo-both","exo-exo")))
-save(myPairs,file="get_myPairs.Rda")
-```
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------
 load("get_myPairs.Rda")
 myPairs %>% ggplot(.,aes(setComparison,fill=highestSharedRank))+geom_bar(position="fill")
 
@@ -891,9 +867,9 @@ myPairs %>% ggplot(.,aes(x=setComparison,y=dist))+geom_violin()
 
 
 
-```
 
-```{r treeTips}
+
+## ----treeTips------------------------------------------------------------------------------------------------------
 
 tips <- as.data.frame(tr$tip.label)
 tips %<>% dplyr::rename(para=`tr$tip.label`)
@@ -921,58 +897,58 @@ nri <-ses.mpd(t(comm),tr,null.model="independentswap",runs=1000,abundance.weight
 
 
 
-```
-
-```{r eval=F}
-#traits of 'best hosts'?
-library(rfishbase)
-z <- rfishbase::diet(tips$para[1])
 
 
-tmp <- rfishbase::popchar(hostOfAdultParas)
+## ----eval=F--------------------------------------------------------------------------------------------------------
+## #traits of 'best hosts'?
+## library(rfishbase)
+## z <- rfishbase::diet(tips$para[1])
+## 
+## 
+## tmp <- rfishbase::popchar(hostOfAdultParas)
+## 
+## tmp %>% ggplot(.,aes(x=Lmax,y=Wmax))+geom_point()
+## tmp %>% ggplot(.,aes(x=Lmax,y=tmax))+geom_point()
+## tmp %>% ggplot(.,aes(x=tmax,y=Wmax))+geom_point()
+## 
+## 
+## #as a look-see, get the most specialist parasite (adult-stage)
+## #Salsuginus_angularis
+## # and the most generalist (with at least 5 host species)
+## #Magnivitellinum_simplex
+## #what sort of hosts do they use
+## hostsOfSpec <- fA %>% dplyr::filter(Parasite_species=="Salsuginus_angularis") %>% dplyr::select(Host_species) %>% distinct() %>% pull()
+## hostsOfGen <- fA %>% dplyr::filter(Parasite_species=="Magnivitellinum_simplex") %>% dplyr::select(Host_species) %>% distinct() %>% pull()
+## 
+## hostsOfSpec <- gsub("_"," ",hostsOfSpec)
+## hostsOfGen <- gsub("_"," ",hostsOfGen)
+## popCharSpec <- rfishbase::popchar(hostsOfSpec)
+## popCharGen <- rfishbase::popchar(hostsOfGen)
+## 
+## hostTraits <- tibble(Parasite_species=character(0),
+##                      maxLmax=numeric(0),
+##                      maxWmax=numeric(0),
+##                      maxTmax=numeric(0))
+## 
+## for (i in 1:dim(zNat)[1]){
+##   thisPara <- zNat$Parasite_species[i]
+##   hostsOfThisPara <- fA %>% dplyr::filter(Parasite_species==thisPara) %>% dplyr::select(Host_species) %>% distinct() %>% pull()
+##   hostsOfThisPara <- gsub("_"," ",hostsOfThisPara)
+##   popCharThisPara <- rfishbase::popchar(hostsOfThisPara)
+##   if (dim(popCharThisPara)[1]>0){
+##   lengthHostsThisPara <- max(popCharThisPara$Lmax,na.rm=T)
+##   weightHostsThisPara <- max(popCharThisPara$Wmax,na.rm=T)
+##   longevHostsThisPara <- max(popCharThisPara$tmax,na.rm=T)
+##   hostTraits %<>% add_case(Parasite_species=thisPara,
+##                            maxLmax=lengthHostsThisPara,
+##                            maxWmax=weightHostsThisPara,
+##                            maxTmax=longevHostsThisPara)
+##   }
+## }
+## 
+## zNat4Join <- zNat %>% dplyr::select(Parasite_species,Phylum_parasite,mpd.obs.z)
+## hostTraits %<>% left_join(.,zNat4Join)
+## 
+## hostTraits %>% ggplot(.,aes(x=mpd.obs.z,y=maxTmax))+geom_point()+geom_smooth()
+## 
 
-tmp %>% ggplot(.,aes(x=Lmax,y=Wmax))+geom_point()
-tmp %>% ggplot(.,aes(x=Lmax,y=tmax))+geom_point()
-tmp %>% ggplot(.,aes(x=tmax,y=Wmax))+geom_point()
-
-
-#as a look-see, get the most specialist parasite (adult-stage)
-#Salsuginus_angularis
-# and the most generalist (with at least 5 host species)
-#Magnivitellinum_simplex
-#what sort of hosts do they use
-hostsOfSpec <- fA %>% dplyr::filter(Parasite_species=="Salsuginus_angularis") %>% dplyr::select(Host_species) %>% distinct() %>% pull()
-hostsOfGen <- fA %>% dplyr::filter(Parasite_species=="Magnivitellinum_simplex") %>% dplyr::select(Host_species) %>% distinct() %>% pull()
-
-hostsOfSpec <- gsub("_"," ",hostsOfSpec)
-hostsOfGen <- gsub("_"," ",hostsOfGen)
-popCharSpec <- rfishbase::popchar(hostsOfSpec)
-popCharGen <- rfishbase::popchar(hostsOfGen)
-
-hostTraits <- tibble(Parasite_species=character(0),
-                     maxLmax=numeric(0),
-                     maxWmax=numeric(0),
-                     maxTmax=numeric(0))
-
-for (i in 1:dim(zNat)[1]){
-  thisPara <- zNat$Parasite_species[i]
-  hostsOfThisPara <- fA %>% dplyr::filter(Parasite_species==thisPara) %>% dplyr::select(Host_species) %>% distinct() %>% pull()
-  hostsOfThisPara <- gsub("_"," ",hostsOfThisPara)
-  popCharThisPara <- rfishbase::popchar(hostsOfThisPara)
-  if (dim(popCharThisPara)[1]>0){
-  lengthHostsThisPara <- max(popCharThisPara$Lmax,na.rm=T)
-  weightHostsThisPara <- max(popCharThisPara$Wmax,na.rm=T)
-  longevHostsThisPara <- max(popCharThisPara$tmax,na.rm=T)
-  hostTraits %<>% add_case(Parasite_species=thisPara,
-                           maxLmax=lengthHostsThisPara,
-                           maxWmax=weightHostsThisPara,
-                           maxTmax=longevHostsThisPara)
-  }
-}
-
-zNat4Join <- zNat %>% dplyr::select(Parasite_species,Phylum_parasite,mpd.obs.z)
-hostTraits %<>% left_join(.,zNat4Join)
-
-hostTraits %>% ggplot(.,aes(x=mpd.obs.z,y=maxTmax))+geom_point()+geom_smooth()
-
-```

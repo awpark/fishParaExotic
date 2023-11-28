@@ -1,37 +1,30 @@
----
-title: "Harmonize parasite names and taxonomy"
-author: "Andrew W. Park"
-date: "2023-11-28"
-output: html_document
----
-
-```{r setup, include=FALSE}
+## ----setup, include=FALSE------------------------------------------------------------------------------------------
 knitr::opts_chunk$set(echo=F,message=F,warning=F,tidy=T)
-```
 
-```{r loadLibs}
+
+## ----loadLibs------------------------------------------------------------------------------------------------------
 library(tidyverse)
 library(magrittr)
 library(taxize) # classification function
-```
 
-```{r readData}
+
+## ----readData------------------------------------------------------------------------------------------------------
 f <- read_csv("FISH_PARASITE_DATASET.csv")
-```
 
-```{r taxize, eval=F}
-##TAXIZE##
-paras <- f %>% dplyr::select(Parasite_species) %>% distinct()
 
-paraTaxa <- taxize::classification(paras$Parasite_species,db="gbif")
-save(paraTaxa,file="get_paraTaxa.Rda")
-```
+## ----taxize, eval=F------------------------------------------------------------------------------------------------
+## ##TAXIZE##
+## paras <- f %>% dplyr::select(Parasite_species) %>% distinct()
+## 
+## paraTaxa <- taxize::classification(paras$Parasite_species,db="gbif")
+## save(paraTaxa,file="get_paraTaxa.Rda")
 
-```{r loadTaxize}
+
+## ----loadTaxize----------------------------------------------------------------------------------------------------
 load("get_paraTaxa.Rda")
-```
 
-```{r makeTaxaTable}
+
+## ----makeTaxaTable-------------------------------------------------------------------------------------------------
 
 myTaxa <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0),Parasite_species=character(0))
 for (i in 1:length(paraTaxa)){
@@ -68,9 +61,9 @@ for (i in 1:length(paraTaxa)){
 #resolve missing "class" data
 idx <- which(myTaxa$order=="Trichinellida")
 myTaxa$class[idx] <- "Enoplea" # verified
-```
 
-```{r pseudoDuplicateParas}
+
+## ----pseudoDuplicateParas------------------------------------------------------------------------------------------
 dup <- names(which(table(myTaxa$species)>1))
 
 idx <- grep(strsplit(dup[1]," ")[[1]][1],f$Parasite_species) # Megalonia ictaluri
@@ -83,9 +76,9 @@ idx <- grep(substr(gsub(" ","_",dup[3]),1,13),f$Parasite_species) # Wallinia cha
 f$Parasite_species[idx] <- gsub(" ","_",dup[3])
 
 myTaxa %<>% distinct()
-```
 
-```{r problemParas}
+
+## ----problemParas--------------------------------------------------------------------------------------------------
 # 483 parasite species in f, when loaded
 # 3 of these are "extra" (typos [2] or subspecies [1])
 # 480 "real" parasite species
@@ -94,10 +87,10 @@ myTaxa %<>% distinct()
 
 # they've all been investigated and are cases of:
 # minor typos, species synonyms, genus renaming - so, all is good
-```
 
-```{r paraRename}
+
+## ----paraRename----------------------------------------------------------------------------------------------------
 paraNames4join <- myTaxa %>% dplyr::select(Parasite_species,species)
 f %<>% left_join(.,paraNames4join)
 f %<>% dplyr::rename(Parasite_species_old=Parasite_species,Parasite_species=species)
-```
+
