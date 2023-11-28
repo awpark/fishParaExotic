@@ -22,7 +22,7 @@ This analysis uses the data from García-Prieto et al. (2022) to study consequen
 First, we source the `paraPrep` file, which reads in the data, and harmonizes parasites names and taxonomy
 
 ```{r sourceParaPrep}
-source(knitr::purl("inv.qmd"),quiet=T)
+source(knitr::purl("inv.Rmd"),quiet=T)
 ```
 
 Next, we read in a fish phylogenetic tree
