@@ -1,0 +1,192 @@
+---
+title: "Parasite specificty determines infection of exotic fish species"
+author: "Andrew W. Park"
+date: "2023-11-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=F,message=F,warning=F,tidy=T)
+```
+
+```{r libLoad}
+library(tidyverse)
+library(magrittr)
+library(ape) #plot tree
+library(picante) #evol distinct
+```
+
+
+This analysis uses the data from García-Prieto et al. (2022) to study consequences of parasite specificity.
+
+First, we source the `paraPrep` file, which reads in the data, and harmonizes parasites names and taxonomy
+
+```{r sourceParaPrep}
+source(knitr::purl("inv.qmd"),quiet=T)
+```
+
+Next, we read in a fish phylogenetic tree
+
+```{r readFishPhylo}
+library(ape)
+tree <- ape::read.tree("actinopt_12k_raxml.tre")
+
+```
+
+
+
+```{r filterAdult}
+f %<>% mutate(Stage=stringr::str_replace_all(Stage,"Adulto","Adult"))
+fA <- f %>% dplyr::filter(Stage=="Adult")
+
+# remove host or parasite taxa not identified to species
+fA %<>% dplyr::filter(grepl("sp\\.",Host_species)==F)
+fA %<>% dplyr::filter(grepl("sp\\.",Parasite_species)==F)
+
+hostOfAdultParas <- fA %>% dplyr::select(Host_species) %>% distinct() %>% pull()
+hostOfAdultParas <- gsub("_"," ",hostOfAdultParas)
+```
+
+We create a host-parasite matrix
+
+```{r createHPmatrix}
+# matrix of host-(adult)parasite associations
+m <- as.data.frame.matrix(table(fA$Parasite_species,fA$Host_species))
+```
+
+Currently 56 missing fish (in database but not phylogeny)
+
+```{r eval=F}
+#CURRENTLY EVAL FALSE AS FISHBASE PACKAGE HAS DEVELOPED BUG
+# probably a fish synonym issue, but for now remove host species not in fish phylo
+missingFish <- setdiff(colnames(m),tree$tip.label)
+missingFishFormatted <- gsub("_"," ",missingFish)
+library(rfishbase)
+synCheck <- rfishbase::synonyms(missingFishFormatted,server="fishbase")
+synCheck %<>% dplyr::filter(Status %in% c("misapplied name","synonym")) %>% dplyr::select(synonym,Species)
+synCheck %<>% dplyr::mutate(across(.cols=everything(),~str_replace_all(.," ","_")))
+
+idx.1 <- which(fA$Host_species==synCheck$synonym[1])#identifies synomym mathcing in tree
+idx.2 <- which(fA$Host_species==synCheck$synonym[2])# does not
+idx.3 <- which(fA$Host_species==synCheck$synonym[3])# does not
+
+#remove found fish from missing fish
+idx.foundFish <- which(missingFish==synCheck$synonym[1])
+missingFish <- missingFish[-idx.foundFish]
+missingFishFormatted <- gsub("_"," ",missingFish)
+
+
+fA$Host_species[idx.1] <- synCheck$Species[1]
+#idx.2 and idx.3 didn't recover a useful synonym
+
+# recalculate matrix of host-(adult)parasite associations
+m <- as.data.frame.matrix(table(fA$Parasite_species,fA$Host_species))
+
+# for now we remove from host-parasite data those fish species that are not found in the phylogenetic tree
+fA %<>% dplyr::filter(!Host_species %in% missingFish)
+#reCalc fParas now some species removed
+fParas <- fA %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
+```
+
+Are the parasites of exotic fish species (that are also parasites of native fish species) a non-random sample?
+
+```{r}
+
+exoParas <- fA %>% dplyr::filter(Exotic_or_native=="Exotic") %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
+natParas <- fA %>% dplyr::filter(Exotic_or_native=="Native") %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
+
+onlyExoParas <- setdiff(exoParas,natParas)
+
+
+fA %<>% dplyr::filter(!Parasite_species%in%onlyExoParas)
+
+
+natBoth <- tibble(Parasite_species=exoParas,natBoth="both")
+natBoth2 <- tibble(Parasite_species=natParas,natBoth="nat")
+natBoth %<>% bind_rows(.,natBoth2)
+
+doubleCounted <- natBoth %>% group_by(Parasite_species) %>% summarize(n=n()) %>% dplyr::filter(n>1) %>% pull(Parasite_species)
+forTheChop <- NULL
+for (i in 1:dim(natBoth)[1]){
+  if (natBoth$Parasite_species[i] %in% doubleCounted & natBoth$natBoth[i]=="nat"){
+    forTheChop <- c(forTheChop,i)
+  }
+}
+
+natBoth %<>% slice(-forTheChop)
+
+# need parasite specificity measured only in native species
+
+
+fAN <- fA %>% dplyr::filter(Exotic_or_native=="Native")
+mNat <- as.data.frame.matrix(table(fAN$Parasite_species,fAN$Host_species))
+
+#perform mpd analysis
+library(picante)
+phydist <- ape::cophenetic.phylo(tree) 
+
+#reduce phydist to host species in fish database
+idx <- which(rownames(phydist) %in% fAN$Host_species)
+phydist.nat <- phydist[idx,idx]
+
+#reduce HP association matrix to fish in phydist
+idx <- which(colnames(mNat) %in% colnames(phydist.nat))
+mNat <- mNat[,idx]
+idx <- which(rowSums(mNat)!=0)
+mNat <- mNat[idx,]
+```
+
+```{r eval=FALSE}
+zNat <- picante::ses.mpd(mNat,phydist.nat,null.model="independentswap",runs=1000,abundance.weighted=F)
+save(zNat,file="get_zNat.Rda")
+```
+
+```{r}
+load("get_zNat.Rda")
+zNat %<>% mutate(Parasite_species=rownames(.))
+
+paraPhylum <- f %>% dplyr::select(Parasite_species,Phylum_parasite) %>% distinct()
+paraClass <- f %>% dplyr::select(Parasite_species,Class_parasite) %>% distinct()
+
+zNat %<>% left_join(.,paraPhylum)
+zNat %<>% left_join(.,paraClass)
+
+zNat %<>% left_join(.,natBoth)
+zNat %<>% drop_na(Phylum_parasite,mpd.obs.z)
+zNat %<>% mutate(sg=if_else(mpd.obs.z>(-1.96),"g","s"))
+
+#density plot of specificity
+#zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda")) %>% ggplot(.,aes(x=mpd.obs.z,fill=as.factor(natBoth)))+geom_density(alpha=0.3)+facet_wrap(~Phylum_parasite)
+
+plot.zNatA <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda")) %>% ggplot(.,aes(x=mpd.obs.z,fill=as.factor(natBoth)))+geom_density(alpha=0.5,trim=T,col="gray50")+xlab("Phylogenetic specificity")+scale_fill_manual(name="Host type infected",labels=c("Native and exotic","Native only"),values=c("orange","skyblue"))+ylab("Density")+theme_classic()+ggtitle("Adult parasite stages")+facet_wrap(~Phylum_parasite)+xlim(-6,1.5)+ylim(0,0.6)+theme(legend.position="none")
+
+
+
+zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes")) %>% ggplot(.,aes(y=mpd.obs.z,x=as.factor(natBoth)))+geom_violin(aes(fill=as.factor(natBoth)))
+
+
+zPlat1 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & natBoth=="nat") %>% dplyr::select(mpd.obs.z) %>% pull()
+zPlat2 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes") & natBoth=="both") %>% dplyr::select(mpd.obs.z) %>% pull()
+
+wilcox.test(zPlat1,zPlat2)
+
+zPlat1 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Nematoda") & natBoth=="nat") %>% dplyr::select(mpd.obs.z) %>% pull()
+zPlat2 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Nematoda") & natBoth=="both") %>% dplyr::select(mpd.obs.z) %>% pull()
+
+wilcox.test(zPlat1,zPlat2)
+
+zPlat1 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda") & natBoth=="nat") %>% dplyr::select(mpd.obs.z) %>% pull()
+zPlat2 <- zNat %>% dplyr::filter(Phylum_parasite %in% c("Platyhelminthes","Nematoda") & natBoth=="both") %>% dplyr::select(mpd.obs.z) %>% pull()
+
+wilcox.test(zPlat1,zPlat2)
+
+#library(brunnermunzel)
+
+#brunnermunzel.test(zPlat1,zPlat2)
+
+#library(nonpar)
+#lepage.test(zPlat1,zPlat2)
+
+#library(misty)
+
+```
