@@ -52,6 +52,66 @@ natParas <- f %>% dplyr::filter(Exotic_or_native=="Native") %>% dplyr::select(Pa
 onlyExoParas <- setdiff(exoParas,natParas)
 bothHostParas <- intersect(exoParas,natParas)
 onlyNatParas <- setdiff(natParas,exoParas)
+
+paraSets <- tibble(para=character(0),set=character(0))
+onlyExoBuild <- bind_cols(onlyExoParas,"exo")
+onlyExoBuild %<>% dplyr::rename("para"="...1")
+onlyExoBuild %<>% dplyr::rename("set"="...2")
+
+onlyNatBuild <- bind_cols(onlyNatParas,"nat")
+onlyNatBuild %<>% dplyr::rename("para"="...1")
+onlyNatBuild %<>% dplyr::rename("set"="...2")
+
+bothBuild <- bind_cols(bothHostParas,"both")
+bothBuild %<>% dplyr::rename("para"="...1")
+bothBuild %<>% dplyr::rename("set"="...2")
+
+paraSets %<>% bind_rows(onlyExoBuild)
+paraSets %<>% bind_rows(onlyNatBuild)
+paraSets %<>% bind_rows(bothBuild)
+
 ```
 
+
+```{r plotTree}
+
+tips <- as.data.frame(tr$tip.label)
+tips %<>% dplyr::rename(para=`tr$tip.label`)
+#hostSet4join <- taxDist %>% mutate(para=str_replace_all(para,"_"," "))
+tips %<>% left_join(.,paraSets)
+
+cladeEXObranches<-which.edge(tr,which(tips$set=="exo"))
+cladeNATbranches<-which.edge(tr,which(tips$set=="nat"))
+cladeBOTHbranches<-which.edge(tr,which(tips$set=="both"))
+
+my.edge.colors<-rep("gray20",length(tr$edge.length))
+my.edge.colors[cladeEXObranches]<-"dodgerblue3"
+my.edge.colors[cladeNATbranches]<-"gray80"
+my.edge.colors[cladeBOTHbranches]<-"brown"
+
+plot(tr,show.tip.label=T,edge.color=my.edge.colors,edge.width=0.5,direction="rightwards",cex=0.3,label.offset=0)#,x.lim=c(0,1200))
+
+```
+
+Test if taxonomic relatedness of exo parasites are different from other (=nat+both) and if metrics of both are different from nat
+Ans: exo are different, both are not
+
+```{r}
+
+m <- ape::cophenetic.phylo(tr)
+
+#compare exo to all
+comm <- as.data.frame.matrix(table(paraSets$para,paraSets$set))
+comm <- t(comm)
+z.exo <- picante::ses.mpd(comm,m)
+
+#compare both to nat
+paraSetsSub <- paraSets %>% dplyr::filter(set!="exo")
+idx <- which(rownames(m) %in% paraSetsSub$para)
+mSub <- m[idx,idx]
+commSub <- as.data.frame.matrix(table(paraSetsSub$para,paraSetsSub$set))
+commSub <- t(commSub)
+z.both <- picante::ses.mpd(commSub,mSub)
+
+```
 
