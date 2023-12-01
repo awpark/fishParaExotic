@@ -1,0 +1,57 @@
+---
+title: "What is the likely source (native/invasive hosts) of parasite species?"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: "setup"
+#| include: false
+knitr::opts_chunk$set(echo=F,message=F,warning=F,tidy=T)
+library(tidyverse)
+library(magrittr)
+library(ape) #plot tree
+library(picante) #evol distinct
+```
+
+This analysis uses the data from García-Prieto et al. (2022) to study consequences of parasite specificity.
+
+First, we source the `paraPrep` file, which reads in the data, and harmonizes parasites names and taxonomy
+
+```{r sourceParaPrep}
+source(knitr::purl("paraPrep.qmd",quiet=T))
+```
+
+Are the parasites exclusively of exotic fish species taxonomically random?
+
+First, make a taxonomic tree
+
+```{r makeTaxaTree}
+frm <- ~kingdom/phylum/class/order/family/genus/species
+
+myTaxa %<>% mutate(species=as.factor(species))
+myTaxa %<>% mutate(genus=as.factor(genus))
+myTaxa %<>% mutate(family=as.factor(family))
+myTaxa %<>% mutate(order=as.factor(order))
+myTaxa %<>% mutate(class=as.factor(class))
+myTaxa %<>% mutate(phylum=as.factor(phylum))
+myTaxa %<>% mutate(kingdom=as.factor(kingdom))
+
+tr <- as.phylo(frm, data = myTaxa, collapse=FALSE)
+tr$edge.length <- rep(1, nrow(tr$edge))
+
+```
+
+
+Classify parasite species as infecting only native species, only exotic species, or both
+
+```{r}
+exoParas <- f %>% dplyr::filter(Exotic_or_native=="Exotic") %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
+natParas <- f %>% dplyr::filter(Exotic_or_native=="Native") %>% dplyr::select(Parasite_species) %>% distinct() %>% pull()
+
+onlyExoParas <- setdiff(exoParas,natParas)
+bothHostParas <- intersect(exoParas,natParas)
+onlyNatParas <- setdiff(natParas,exoParas)
+```
+
+

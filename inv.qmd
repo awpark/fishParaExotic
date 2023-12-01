@@ -538,8 +538,6 @@ taxDist %<>% bind_rows(.,tmpBoth)
 
 ```
 
-
-
 ```{r}
 frm <- ~kingdom/phylum/class/order/family/genus/species
 
@@ -596,8 +594,8 @@ for (i in 1:dim(myTaxa)[1]){
       sp_1 <- gsub(" ","_",sp1)
       sp_2 <- gsub(" ","_",sp2)
       #look up each parasite's set
-      idx1 <- which(taxDist$para==sp_1)
-      idx2 <- which(taxDist$para==sp_2)
+      idx1 <- which(taxDist$para==sp1)
+      idx2 <- which(taxDist$para==sp2)
       # define set comparison
       if (taxDist$hostSet[idx1]=="exo" & taxDist$hostSet[idx2]=="exo"){
         setComparison <- "exo-exo"

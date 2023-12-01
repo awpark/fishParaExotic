@@ -42,7 +42,7 @@ for (i in 1:length(paraTaxa)){
   family <- thisDf$name[which(thisDf$rank=="family")]
   genus <- thisDf$name[which(thisDf$rank=="genus")]
   species <- thisDf$name[which(thisDf$rank=="species")]}
-  else if (dim(thisDf)[1]==6){
+  else if (dim(thisDf)[1]==6 & grepl("class",paste(thisDf$rank,collapse=" "))==T & grepl("family",paste(thisDf$rank,collapse=" "))==T){
   kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
   phylum <- thisDf$name[which(thisDf$rank=="phylum")]
   class <- thisDf$name[which(thisDf$rank=="class")]
@@ -50,6 +50,22 @@ for (i in 1:length(paraTaxa)){
   family <- thisDf$name[which(thisDf$rank=="family")]
   genus <- thisDf$name[which(thisDf$rank=="genus")]
   species <- gsub("_"," ",names(paraTaxa)[i]) }
+  else if (dim(thisDf)[1]==6 & grepl("class",paste(thisDf$rank,collapse=" "))==F){
+  kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
+  phylum <- thisDf$name[which(thisDf$rank=="phylum")]
+  class <- "TBD"
+  order <- thisDf$name[which(thisDf$rank=="order")]
+  family <- thisDf$name[which(thisDf$rank=="family")]
+  genus <- thisDf$name[which(thisDf$rank=="genus")]
+  species <- thisDf$name[which(thisDf$rank=="species")]}
+  else if (dim(thisDf)[1]==6 & grepl("family",paste(thisDf$rank,collapse=" "))==F){
+  kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
+  phylum <- thisDf$name[which(thisDf$rank=="phylum")]
+  class <- thisDf$name[which(thisDf$rank=="class")]
+  order <- thisDf$name[which(thisDf$rank=="order")]
+  family <- "TBD"
+  genus <- thisDf$name[which(thisDf$rank=="genus")]
+  species <- thisDf$name[which(thisDf$rank=="species")]}
   else {
   kingdom <- thisDf$name[which(thisDf$rank=="kingdom")]
   phylum <- thisDf$name[which(thisDf$rank=="phylum")]
@@ -66,6 +82,14 @@ for (i in 1:length(paraTaxa)){
 #resolve missing "class" data
 idx <- which(myTaxa$order=="Trichinellida")
 myTaxa$class[idx] <- "Enoplea" # verified
+
+#resolve missing "family" data
+#Anisakidae AWP used this publication https://doi.org/10.35929/RSZ.0062
+idx <- which(myTaxa$family=="TBD")
+myTaxa$family[idx] <- "Anisakidae"
+
+
+
 ```
 
 ```{r pseudoDuplicateParas}
@@ -83,19 +107,12 @@ f$Parasite_species[idx] <- gsub(" ","_",dup[3])
 myTaxa %<>% distinct()
 ```
 
-```{r problemParas}
-# 483 parasite species in f, when loaded
-# 3 of these are "extra" (typos [2] or subspecies [1])
-# 480 "real" parasite species
-# myTaxa has 469 unique parasite species
-# so, what happened to the missing 11?
-
-# they've all been investigated and are cases of:
-# minor typos, species synonyms, genus renaming - so, all is good
-```
 
 ```{r paraRename}
-paraNames4join <- myTaxa %>% dplyr::select(Parasite_species,species)
+paraNames4join <- myTaxa %>% dplyr::select(Parasite_species,species) #this will serve as synonym dictionary
 f %<>% left_join(.,paraNames4join)
 f %<>% dplyr::rename(Parasite_species_old=Parasite_species,Parasite_species=species)
+
+myTaxa %<>% dplyr::select(-Parasite_species) %>% distinct() # remove parasites duplicated by typo
+
 ```
