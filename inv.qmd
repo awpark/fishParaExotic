@@ -52,7 +52,6 @@ m <- as.data.frame.matrix(table(fA$Parasite_species,fA$Host_species))
 Currently 56 missing fish (in database but not phylogeny)
 
 ```{r eval=F}
-#CURRENTLY EVAL FALSE AS FISHBASE PACKAGE HAS DEVELOPED BUG
 # probably a fish synonym issue, but for now remove host species not in fish phylo
 missingFish <- setdiff(colnames(m),tree$tip.label)
 missingFishFormatted <- gsub("_"," ",missingFish)
@@ -64,14 +63,19 @@ synCheck %<>% dplyr::mutate(across(.cols=everything(),~str_replace_all(.," ","_"
 idx.1 <- which(fA$Host_species==synCheck$synonym[1])#identifies synomym mathcing in tree
 idx.2 <- which(fA$Host_species==synCheck$synonym[2])# does not
 idx.3 <- which(fA$Host_species==synCheck$synonym[3])# does not
+idx.4 <- which(fA$Host_species==synCheck$synonym[3])# does not
 
 #remove found fish from missing fish
-idx.foundFish <- which(missingFish==synCheck$synonym[1])
+idx.foundFish <- which(missingFish %in% synCheck$synonym[1:4])
 missingFish <- missingFish[-idx.foundFish]
 missingFishFormatted <- gsub("_"," ",missingFish)
 
 
 fA$Host_species[idx.1] <- synCheck$Species[1]
+fA$Host_species[idx.2] <- synCheck$Species[2]
+fA$Host_species[idx.3] <- synCheck$Species[3]
+fA$Host_species[idx.4] <- synCheck$Species[4]
+
 #idx.2 and idx.3 didn't recover a useful synonym
 
 # recalculate matrix of host-(adult)parasite associations
