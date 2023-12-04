@@ -1,4 +1,3 @@
-## ----------------------------------------------------------------------------------------------------------------------------------------------
 #| label: "setup"
 #| include: false
 knitr::opts_chunk$set(echo=F,message=F,warning=F,tidy=T)
@@ -7,11 +6,11 @@ library(magrittr)
 library(taxize) # classification function
 
 
-## ----readData----------------------------------------------------------------------------------------------------------------------------------
+
 f <- read_csv("FISH_PARASITE_DATASET.csv")
 
 
-## ----taxize, eval=F----------------------------------------------------------------------------------------------------------------------------
+
 ## ##TAXIZE##
 ## paras <- f %>% dplyr::select(Parasite_species) %>% distinct()
 ## 
@@ -19,11 +18,11 @@ f <- read_csv("FISH_PARASITE_DATASET.csv")
 ## save(paraTaxa,file="get_paraTaxa.Rda")
 
 
-## ----loadTaxize--------------------------------------------------------------------------------------------------------------------------------
+
 load("get_paraTaxa.Rda")
 
 
-## ----makeTaxaTable-----------------------------------------------------------------------------------------------------------------------------
+
 
 myTaxa <- tibble(kingdom=character(0),phylum=character(0),class=character(0),order=character(0),family=character(0),genus=character(0),species=character(0),Parasite_species=character(0))
 for (i in 1:length(paraTaxa)){
@@ -86,7 +85,7 @@ myTaxa$family[idx] <- "Anisakidae"
 
 
 
-## ----pseudoDuplicateParas----------------------------------------------------------------------------------------------------------------------
+
 dup <- names(which(table(myTaxa$species)>1))
 
 idx <- grep(strsplit(dup[1]," ")[[1]][1],f$Parasite_species) # Megalonia ictaluri
@@ -101,7 +100,7 @@ f$Parasite_species[idx] <- gsub(" ","_",dup[3])
 myTaxa %<>% distinct()
 
 
-## ----paraRename--------------------------------------------------------------------------------------------------------------------------------
+
 paraNames4join <- myTaxa %>% dplyr::select(Parasite_species,species) #this will serve as synonym dictionary
 f %<>% left_join(.,paraNames4join)
 f %<>% dplyr::rename(Parasite_species_old=Parasite_species,Parasite_species=species)

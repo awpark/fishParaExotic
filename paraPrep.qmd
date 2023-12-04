@@ -107,7 +107,6 @@ f$Parasite_species[idx] <- gsub(" ","_",dup[3])
 myTaxa %<>% distinct()
 ```
 
-
 ```{r paraRename}
 paraNames4join <- myTaxa %>% dplyr::select(Parasite_species,species) #this will serve as synonym dictionary
 f %<>% left_join(.,paraNames4join)
