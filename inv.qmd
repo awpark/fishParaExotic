@@ -30,6 +30,10 @@ tree <- ape::read.tree("actinopt_12k_raxml.tre")
 
 ```
 
+
+
+
+
 ```{r filterAdult}
 f %<>% mutate(Stage=stringr::str_replace_all(Stage,"Adulto","Adult"))
 fA <- f %>% dplyr::filter(Stage=="Adult")
@@ -681,12 +685,12 @@ cladeEXObranches<-which.edge(tr,which(tips$hostSet=="exo"))
 cladeNATbranches<-which.edge(tr,which(tips$hostSet=="nat"))
 cladeBOTHbranches<-which.edge(tr,which(tips$hostSet=="both"))
 
-my.edge.colors<-rep("gray20",length(tr$edge.length))
+my.edge.colors<-rep("gray80",length(tr$edge.length))
 my.edge.colors[cladeEXObranches]<-"dodgerblue3"
 my.edge.colors[cladeNATbranches]<-"gray80"
 my.edge.colors[cladeBOTHbranches]<-"brown"
 
-plot(tr,show.tip.label=T,edge.color=my.edge.colors,edge.width=0.5,direction="rightwards",cex=0.3,label.offset=0)#,x.lim=c(0,1200))
+plot(tr,show.tip.label=F,edge.color=my.edge.colors,edge.width=0.5,direction="downwards",cex=0.3,label.offset=0)#,x.lim=c(0,1200))
 
 
 comm <- as.data.frame.matrix(table(taxDist$para,taxDist$hostSet))
